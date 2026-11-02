@@ -1,0 +1,2 @@
+dataset\training_set\Heart\heart (633).jpg
+dataset\training_set\Square\square (84).jpg

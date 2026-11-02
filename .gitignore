@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+.streamlit/secrets.toml
+face_shape_model.keras
+best_face_shape_model.keras
+dataset/
+dataset_clean/
+dataset_faces/
+dataset_faces_clean/
+dataset_stratified/
+.ipynb_checkpoints/
