@@ -1,0 +1,10 @@
+# Application runtime. Direct dependencies exercised on Linux x86-64 / CPython 3.12.
+# On minimal Linux systems also install libgles2; see docs/deployment.md.
+tensorflow==2.21.0
+keras==3.15.1
+mediapipe==1.2.0
+opencv-contrib-python==5.0.0.93
+numpy==2.5.4
+Pillow==13.0.0
+requests==2.34.2
+streamlit==1.66.1

@@ -4,7 +4,12 @@ import mediapipe as mp
 import tensorflow as tf
 import cv2
 import numpy as np
-import requests
+import os
+from pathlib import Path
+from stylesense_catalogue import CLASS_NAMES, HAIRSTYLES, get_references
+from stylesense_backend import generate_three, generate_tryon, TryOnError
+from stylesense_state import (decode_upload, image_png, upload_fingerprint,
+                              sync_upload_state, analyze_records, ImageValidationError)
 from PIL import Image, ImageOps
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -33,19 +38,11 @@ st.write(
 # CONFIGURATION
 # ==========================================
 
-FACE_MODEL_PATH = "face_landmarker.task"
-CLASSIFIER_PATH = "best_mobilenet_finetuned.keras"
+PROJECT_ROOT = Path(__file__).resolve().parent
+FACE_MODEL_PATH = str(PROJECT_ROOT / "face_landmarker.task")
+CLASSIFIER_PATH = str(PROJECT_ROOT / "best_mobilenet_finetuned.keras")
 
 IMG_SIZE = (224, 224)
-
-CLASS_NAMES = [
-    "Heart",
-    "Oblong",
-    "Oval",
-    "Round",
-    "Square"
-]
-
 
 # ==========================================
 # LOAD MODELS
@@ -179,52 +176,6 @@ def predict_face_shape(face_crop):
 
 
 # ==========================================
-# HAIRSTYLE RECOMMENDATIONS
-# ==========================================
-
-HAIRSTYLES = {
-
-    "Heart": [
-        "Side-swept bangs",
-        "Shoulder-length layers",
-        "Chin-length bob"
-    ],
-
-    "Oblong": [
-        "Curtain bangs",
-        "Layered shoulder-length hair",
-        "Wavy bob"
-    ],
-
-    "Oval": [
-        "Long layered hair",
-        "Soft waves",
-        "Curtain bangs"
-    ],
-
-    "Round": [
-        "Long layers",
-        "Side-parted hairstyle",
-        "Long curtain bangs"
-    ],
-
-    "Square": [
-        "Soft layered waves",
-        "Side-swept bangs",
-        "Textured long bob"
-    ]
-}
-# Reference images for AI hairstyle try-on
-HAIRSTYLE_REFERENCES = {
-    "Round": {
-        "Long layers": "hairstyle_references/round_long_layers.jpg",
-        "Side-parted hairstyle": "hairstyle_references/round_side_parted.jpg",
-        "Long curtain bangs": "hairstyle_references/round_curtain_bangs.jpg"
-    }
-}
-
-
-# ==========================================
 # SIDEBAR
 # ==========================================
 
@@ -244,382 +195,182 @@ with st.sidebar:
 
 
 # ==========================================
-# MULTIPLE PHOTO UPLOAD
+# STATEFUL PHOTO ANALYSIS AND TRY-ON
 # ==========================================
+
+def api_configuration():
+    # Server-side settings only; never include values in errors or UI output.
+    try:
+        url = st.secrets.get("HAIRFAST_API_URL", "")
+        token = st.secrets.get("HAIRFAST_API_TOKEN", "")
+    except Exception:
+        url, token = "", ""
+    return (url or os.environ.get("HAIRFAST_API_URL", ""),
+            token or os.environ.get("HAIRFAST_API_TOKEN", ""))
+
 
 st.header("📸 Upload Your Photos")
-
+st.write("Choose clear, front-facing photos of the same person, with one face per photo.")
+st.caption("When you analyse photos, the first successfully detected portrait and the selected hairstyle references are sent to the configured AI service to generate your looks. The portrait is also used as the colour reference. Generation requires an available AI service.")
 uploaded_files = st.file_uploader(
-    "Select 1 to 3 photos of the same person",
-    type=["jpg", "jpeg", "png"],
-    accept_multiple_files=True,
-    key="multiple_photo_upload",
-    help="Use Ctrl + Click to select multiple photos on Windows."
-)
-
-if uploaded_files:
-
-    if len(uploaded_files) > 3:
-
-        st.error("Maximum 3 photos are allowed.")
-
-    else:
-
-        st.success(
-            f"{len(uploaded_files)} photo(s) uploaded successfully!"
-        )
-
-        st.subheader("Uploaded Photos")
-
-        columns = st.columns(len(uploaded_files))
-
-        for index, uploaded_file in enumerate(uploaded_files):
-
-            uploaded_file.seek(0)
-
-            image = Image.open(uploaded_file).convert("RGB")
-
-            with columns[index]:
-
-                st.image(
-                    image,
-                    caption=f"Photo {index + 1}",
-                    use_container_width=True
-                )
-
-        analyze = st.button(
-            "🔍 Analyze All Photos",
-            type="primary",
-            use_container_width=True
-        )
-
-        if analyze:
-
-            all_predictions = []
-            individual_predictions = []
-
-            st.header("Face Detection Results")
-
-            progress = st.progress(0)
-
-            for index, uploaded_file in enumerate(uploaded_files):
-
-                uploaded_file.seek(0)
-
-                image = Image.open(
-                    uploaded_file
-                ).convert("RGB")
-
-                with st.spinner(
-                    f"Analyzing photo {index + 1}..."
-                ):
-
-                    face_crop, annotated_image = detect_and_crop_face(
-                        image
-                    )
-
-                    if face_crop is None:
-
-                        st.warning(
-                            f"No face detected in Photo {index + 1}. "
-                            "This photo was skipped."
-                        )
-
-                    else:
-
-                        probabilities = predict_face_shape(
-                            face_crop
-                        )
-
-                        all_predictions.append(probabilities)
-
-                        predicted_index = np.argmax(probabilities)
-
-                        individual_predictions.append(
-                            CLASS_NAMES[predicted_index]
-                        )
-
-                        col1, col2 = st.columns(2)
-
-                        with col1:
-
-                            st.image(
-                                annotated_image,
-                                caption=f"Photo {index + 1}: Face detection",
-                                use_container_width=True
-                            )
-
-                        with col2:
-
-                            st.image(
-                                face_crop,
-                                caption=f"Photo {index + 1}: Face crop",
-                                use_container_width=True
-                            )
-
-                        st.write(
-                            f"**Individual prediction:** "
-                            f"{CLASS_NAMES[predicted_index]}"
-                        )
-
-                        st.write(
-                            f"**Individual confidence:** "
-                            f"{probabilities[predicted_index] * 100:.2f}%"
-                        )
-
-                progress.progress(
-                    (index + 1) / len(uploaded_files)
-                )
-
-            # ======================================
-            # COMBINED PREDICTION
-            # ======================================
-
-            if len(all_predictions) == 0:
-
-                st.error(
-                    "No usable faces were detected. "
-                    "Please upload clearer photographs."
-                )
-
-            else:
-
-                average_probabilities = np.mean(
-                    np.array(all_predictions),
-                    axis=0
-                )
-
-                final_index = np.argmax(
-                    average_probabilities
-                )
-
-                final_shape = CLASS_NAMES[final_index]
-
-                confidence = (
-                    average_probabilities[final_index] * 100
-                )
-
-                st.divider()
-
-                st.header("✨ Your Combined Result")
-
-                col1, col2 = st.columns(2)
-
-                with col1:
-
-                    st.metric(
-                        "Predicted Face Shape",
-                        final_shape
-                    )
-
-                with col2:
-
-                    st.metric(
-                        "Average Model Confidence",
-                        f"{confidence:.2f}%"
-                    )
-
-                st.write(
-                    f"Successfully analyzed {len(all_predictions)} "
-                    f"out of {len(uploaded_files)} photos."
-                )
-
-                # Individual predictions
-                st.subheader("Individual Photo Predictions")
-
-                for index, prediction in enumerate(
-                    individual_predictions
-                ):
-
-                    st.write(
-                        f"Photo {index + 1}: **{prediction}**"
-                    )
-
-                # Combined probabilities
-                st.subheader("Combined Probability Distribution")
-
-                for index, shape in enumerate(CLASS_NAMES):
-
-                    probability = float(
-                        average_probabilities[index]
-                    )
-
-                    st.write(
-                        f"**{shape}: {probability * 100:.2f}%**"
-                    )
-
-                    st.progress(probability)
-
-                # Agreement check
-                if len(set(individual_predictions)) == 1:
-
-                    st.success(
-                        "All photos agree on the predicted face shape."
-                    )
-
-                else:
-
-                    st.warning(
-                        "Your photos produced different predictions. "
-                        "The combined result is an estimate."
-                    )
-
-                if confidence < 50:
-
-                    st.warning(
-                        "The model is uncertain about this result. "
-                        "Try clearer, front-facing photographs."
-                    )
-
-                # Hairstyle suggestions
-                st.divider()
-
-                st.header(
-                    f"💇 Hairstyles for {final_shape} Face Shape"
-                )
-
-                hairstyle_columns = st.columns(3)
-
-                for index, hairstyle in enumerate(
-                    HAIRSTYLES[final_shape]
-                ):
-
-                    with hairstyle_columns[index]:
-
-                        st.markdown(
-                            f"### {hairstyle}"
-                        )
-
-                st.info(
-                    "These are general recommendations. "
-                    "Hair texture, density and personal preference "
-                    "also matter when choosing a hairstyle."
-                )
-
-                st.caption(
-                    "AI predictions are experimental and may vary "
-                    "with lighting, face angle and image quality."
-                )
-
-
-# ---------------- AI HAIRSTYLE TRY-ON ----------------
-
-st.divider()
-st.header("✨ AI Virtual Hairstyle Try-On")
-
-st.write(
-    "Upload reference photos to see how a different hairstyle "
-    "and hair colour could look on you."
-)
-
-if not uploaded_files:
-    st.info("Upload your face photo in the section above first.")
-
-else:
-    col1, col2 = st.columns(2)
-
-    with col1:
-        hairstyle_reference = st.file_uploader(
-            "Upload hairstyle reference",
-            type=["jpg", "jpeg", "png"],
-            key="hairstyle_reference"
-        )
-
-    with col2:
-        color_reference = st.file_uploader(
-            "Upload hair colour reference",
-            type=["jpg", "jpeg", "png"],
-            key="color_reference"
-        )
-
-    st.caption(
-        "Your first uploaded photo will be used as your face photo. "
-        "The hairstyle reference provides the hairstyle, while the "
-        "colour reference provides the hair colour."
-    )
-
-    if st.button("Generate AI Try-On", type="primary"):
-        if hairstyle_reference is None or color_reference is None:
-            st.warning("Please upload both reference photos.")
-        else:
+    "Select 1 to 3 photos of the same person", type=["jpg", "jpeg", "png"],
+    accept_multiple_files=True, key="multiple_photo_upload")
+items = [(file.name, file.getvalue()) for file in (uploaded_files or [])]
+sync_upload_state(st.session_state, upload_fingerprint(items))
+
+if len(items) > 3:
+    st.error("Maximum 3 photos are allowed. Remove extra photos to continue.")
+elif items:
+    if "input_records" not in st.session_state:
+        records = []
+        for index, (name, data) in enumerate(items, 1):
+            record = {"index": index, "name": name}
             try:
-                api_url = st.secrets["HAIRFAST_API_URL"].rstrip("/")
-                api_token = st.secrets["HAIRFAST_API_TOKEN"]
+                record["image"] = decode_upload(data)
+            except ImageValidationError as error:
+                record["error"] = str(error)
+            records.append(record)
+        st.session_state.input_records = records
+    records = st.session_state.input_records
+    for column, record in zip(st.columns(len(records)), records):
+        with column:
+            if record.get("error"):
+                st.warning(f"Photo {record['index']}: {record['error']}")
+            else:
+                st.image(record["image"], caption=f"Photo {record['index']}", use_container_width=True)
 
-                face_file = uploaded_files[0]
+    analyse = st.button("🔍 Analyze All Photos", type="primary", use_container_width=True,
+                        disabled="analysis" in st.session_state)
+    if analyse:
+        with st.spinner("Analysing your photos..."):
+            st.session_state.analysis = analyze_records(records, detect_and_crop_face, predict_face_shape)
 
-                files = {
-                    "face": (
-                        face_file.name,
-                        face_file.getvalue(),
-                        face_file.type
-                    ),
-                    "hairstyle": (
-                        hairstyle_reference.name,
-                        hairstyle_reference.getvalue(),
-                        hairstyle_reference.type
-                    ),
-                    "color": (
-                        color_reference.name,
-                        color_reference.getvalue(),
-                        color_reference.type
-                    )
-                }
+    analysis = st.session_state.get("analysis")
+    if analysis is not None:
+        st.header("Face Detection Results")
+        for photo in analysis["photos"]:
+            if photo.get("error"):
+                st.warning(f"Photo {photo['index']}: {photo['error']}")
+                continue
+            left, right = st.columns(2)
+            left.image(photo["annotated"], caption=f"Photo {photo['index']}: Face detection", use_container_width=True)
+            right.image(photo["crop"], caption=f"Photo {photo['index']}: Face crop", use_container_width=True)
+            winner = int(np.argmax(photo["probabilities"]))
+            st.write(f"Photo {photo['index']}: **{CLASS_NAMES[winner]}** — {photo['probabilities'][winner] * 100:.2f}%")
 
-                with st.spinner(
-                    "AI is generating your new hairstyle. Please wait..."
-                ):
-                    response = requests.post(
-                        f"{api_url}/tryon",
-                        headers={
-                            "Authorization": f"Bearer {api_token}"
-                        },
-                        files=files,
-                        timeout=600
-                    )
-
-                if response.status_code == 200 and response.headers.get(
-                    "content-type", ""
-                ).startswith("image/"):
-
-                    st.success("Your AI hairstyle is ready!")
-
-                    st.image(
-                        response.content,
-                        caption="Your AI Hairstyle Try-On",
-                        use_container_width=True
-                    )
-
-                    st.download_button(
-                        "Download Your New Look",
-                        data=response.content,
-                        file_name="stylesense_tryon.png",
-                        mime="image/png"
-                    )
-
+        combined = analysis["combined"]
+        if combined is None:
+            st.error("No usable faces were detected. Please upload clearer photographs.")
+            if st.button("Retry analysis"):
+                st.session_state.pop("analysis", None)
+                st.rerun()
+        else:
+            final_index = int(np.argmax(combined))
+            final_shape = CLASS_NAMES[final_index]
+            confidence = float(combined[final_index] * 100)
+            st.header("✨ Your Combined Result")
+            left, right = st.columns(2)
+            left.metric("Predicted Face Shape", final_shape)
+            right.metric("Average Model Confidence", f"{confidence:.2f}%")
+            st.write(f"Successfully analysed {len(analysis['valid'])} out of {len(records)} photos.")
+            st.subheader("Combined Probability Distribution")
+            for shape, probability in zip(CLASS_NAMES, combined):
+                st.write(f"**{shape}: {probability * 100:.2f}%**")
+                st.progress(float(probability))
+            predictions = [int(np.argmax(photo["probabilities"])) for photo in analysis["valid"]]
+            if len(predictions) > 1:
+                if len(set(predictions)) == 1:
+                    st.success("All successfully analysed photos agree on the predicted face shape.")
                 else:
-                    st.error(
-                        f"Try-on failed ({response.status_code}): "
-                        f"{response.text[:1000]}"
-                    )
+                    st.warning("Your photos produced different predictions. The combined result is an estimate.")
+            if confidence < 50:
+                st.warning("The model is uncertain. Try clearer, front-facing photographs.")
 
-            except requests.exceptions.Timeout:
-                st.error("The generation took too long. Please try again.")
+            st.header(f"💇 Hairstyles for {final_shape} Face Shape")
+            for column, hairstyle in zip(st.columns(3), HAIRSTYLES[final_shape]):
+                column.markdown(f"### {hairstyle}")
+            st.info("These are general recommendations. Hair texture, density and personal preference also matter.")
+            st.caption("AI predictions are experimental and may vary with lighting, face angle and image quality.")
 
-            except requests.exceptions.RequestException as e:
-                st.error(f"Could not connect to the AI server: {e}")
+            portrait = analysis["valid"][0]["portrait"]
+            st.caption(f"Photo {analysis['valid'][0]['index']} is used for try-on and natural hair colour reference.")
+            api_url, api_token = api_configuration()
+            references = dict(get_references(final_shape))
+            missing = [name for name, path in references.items() if path is None or not path.is_file()]
+            # Scope retained results to both the portrait and exact catalogue assets.
+            reference_identity = []
+            for name, path in references.items():
+                try:
+                    reference_identity.append((name, path.read_bytes() if path else b"missing"))
+                except OSError:
+                    reference_identity.append((name, b"unreadable"))
+            generation_fingerprint = upload_fingerprint([("portrait", portrait)] + reference_identity)
+            if st.session_state.get("generation_fingerprint") != generation_fingerprint:
+                st.session_state.pop("generated", None)
+                st.session_state.pop("generation_attempted", None)
+                st.session_state.generation_fingerprint = generation_fingerprint
+            st.header("✨ Your Three AI Hairstyle Try-Ons")
+            if missing:
+                st.warning("Automatic try-on references are not yet available for: " + ", ".join(missing))
+            elif not api_url or not api_token:
+                st.info("AI generation is not configured yet. Your analysis is saved; configure the AI service to generate your three looks.")
+            else:
+                generated = st.session_state.get("generated", {})
+                incomplete = any(not generated.get(name, {}).get("image") for name in references)
+                retry = False
+                if st.session_state.get("generation_attempted") and incomplete:
+                    retry = st.button("Retry unfinished hairstyles")
+                if not st.session_state.get("generation_attempted") or retry:
+                    st.session_state.generation_attempted = True
+                    with st.spinner("Generating your three hairstyles. Completed looks will be kept if one fails..."):
+                        try:
+                            st.session_state.generated = generate_three(
+                                portrait, references, api_url, api_token,
+                                previous_results=generated)
+                        except Exception:
+                            st.session_state.generated = generated
+                            st.error("Generation could not be completed. Please retry the unfinished styles.")
+                for index, (column, name) in enumerate(zip(st.columns(3), references)):
+                    with column:
+                        st.subheader(name)
+                        result = st.session_state.get("generated", {}).get(name, {})
+                        if result.get("image"):
+                            st.image(result["image"], use_container_width=True)
+                            st.download_button("Download this look", data=result["image"],
+                                               file_name=f"stylesense_{final_shape.lower()}_{index+1}.png",
+                                               mime="image/png", key=f"download_{index}")
+                        elif result.get("error"):
+                            st.warning(result["error"])
 
-            except Exception as e:
-                st.error(f"Something went wrong: {e}")
-
-# ---------------- END AI HAIRSTYLE TRY-ON ----------------
-
-# ==========================================
-# FOOTER
-# ==========================================
+            with st.expander("Advanced: try your own hairstyle and colour references"):
+                hairstyle_reference = st.file_uploader("Upload hairstyle reference", type=["jpg", "jpeg", "png"], key="hairstyle_reference")
+                color_reference = st.file_uploader("Upload hair colour reference", type=["jpg", "jpeg", "png"], key="color_reference")
+                manual_items = [(file.name, file.getvalue()) for file in (hairstyle_reference, color_reference) if file is not None]
+                manual_fingerprint = upload_fingerprint(manual_items)
+                if st.session_state.get("manual_fingerprint") != manual_fingerprint:
+                    st.session_state.pop("manual_result", None)
+                    st.session_state.manual_fingerprint = manual_fingerprint
+                if st.button("Generate AI Try-On", type="primary"):
+                    if hairstyle_reference is None or color_reference is None:
+                        st.warning("Please upload both reference photos.")
+                    elif not api_url or not api_token:
+                        st.info("Configure the AI service before generating a try-on.")
+                    else:
+                        try:
+                            hair = image_png(decode_upload(hairstyle_reference.getvalue()))
+                            colour = image_png(decode_upload(color_reference.getvalue()))
+                            with st.spinner("Generating your custom hairstyle..."):
+                                st.session_state.manual_result = generate_tryon(portrait, hair, colour, api_url, api_token)
+                        except (ImageValidationError, TryOnError) as error:
+                            st.warning(str(error))
+                        except Exception:
+                            st.error("Your custom try-on could not be completed. Please try again.")
+                if st.session_state.get("manual_result"):
+                    st.image(st.session_state.manual_result, caption="Your AI Hairstyle Try-On", use_container_width=True)
+                    st.download_button("Download Your New Look", st.session_state.manual_result,
+                                       file_name="stylesense_tryon.png", mime="image/png")
+else:
+    st.info("Upload your face photos to begin.")
 
 st.divider()
-
-st.caption(
-    "StyleSense AI | Fine-Tuned MobileNetV2 | Face Shape Classification"
-)
+st.caption("StyleSense AI | Fine-Tuned MobileNetV2 | Face Shape Classification")
