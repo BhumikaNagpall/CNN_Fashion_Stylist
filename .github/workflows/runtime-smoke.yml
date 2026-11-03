@@ -1,0 +1,44 @@
+name: CPU inference smoke test
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - app.py
+      - stylesense_*.py
+      - requirements.txt
+      - face_landmarker.task
+      - best_mobilenet_finetuned.keras
+      - hairstyle_references/round_long_layers.jpg
+      - scripts/runtime_smoke.py
+      - .github/workflows/runtime-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  real-model-inference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CUDA_VISIBLE_DEVICES: '-1'
+      TF_NUM_INTRAOP_THREADS: '1'
+      TF_NUM_INTEROP_THREADS: '1'
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install native libraries for the detector and OpenCV
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgles2 libegl1 libgl1 libglib2.0-0t64 libportaudio2
+      - name: Install application dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip check
+      - name: Analyse a bundled portrait using both production models
+        run: python -m scripts.runtime_smoke
