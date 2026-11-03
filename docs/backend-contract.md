@@ -26,28 +26,46 @@ discard previous results whenever the portrait or reference catalogue changes.
 
 The automatic flow submits the original validated portrait for both `face` and
 `color`. This is a proposed colour-preservation strategy, **not a verified claim
-about the unavailable service's output quality**. The optional manual flow can
+about live service output quality**. The optional manual flow can
 continue supplying a different colour reference.
 
-## Missing external evidence (blocking live acceptance)
+## Verified exported notebook implementation
 
-The inspected repository contains no HairFastGAN server source, GPU environment,
-model weights, public service URL, or credentials. The client contract above does
-not prove that a deployed server implements these fields or produces images.
-No live generation has been verified as part of implementing this client.
+The project owner supplied a notebook export for local source review. Its final
+API cell writes a FastAPI application with an unauthenticated GET `/health`
+and an authenticated POST `/tryon`. The POST route compares the Authorization
+header with the Bearer token from `HAIRFAST_API_TOKEN`. Its three required
+UploadFile fields exactly match the table above. Each must be nonempty and at
+most 10 MiB. The client enforces this outbound limit after PNG conversion.
 
-The project owner supplied a Colab notebook link. The development environment
-received Colab HTML and a Google sign-in page from the Drive export route.
-The direct content download timed out. These responses did not provide the
-notebook source for inspection.
+The server creates a per-request temporary directory, initializes one HairFast
+instance at startup, and serializes calls with a process-local lock under
+PyTorch inference mode. It calls `hair_fast.swap(face_path, hairstyle_path,
+color_path, align=True)`, saves the first result tensor to memory and returns
+a PNG StreamingResponse. Wrong authorization returns 401, empty parts 400,
+oversized parts 413 and inference exceptions 500. The client suppresses raw
+backend error details.
 
-To complete source review for issue #1, provide a redacted `.ipynb` export with
-outputs cleared, or the equivalent backend source. Live verification separately
-requires the running server's HTTPS base URL. Configure its token privately in deployment
-secrets or environment variables; do not put it in an issue, commit, or report.
-The service must be running with its required GPU/checkpoints. Backend versions,
-VRAM requirements, upstream licensing and startup command must be established
-from that actual backend, not guessed from the client.
+The notebook provisions the HairFastGAN checkout, Python dependencies and
+model checkpoints within a CUDA-capable Colab runtime. The final launcher
+supplies a generated token to Uvicorn (`api_server:app`, port 8000).
+A cloudflared tunnel exposes the local service. Start the model process
+first, verify its local health endpoint, then configure the current HTTPS
+tunnel and matching token privately on the Streamlit host. Multiple exploratory
+installation and repair cells exist. An unattended clean GPU deployment and a
+specific minimum VRAM have not been validated.
+
+The export contains historical image display output after a local inference
+cell and a historical HTTP 200 health probe. These concern local inference and
+health, respectively. Neither verifies a current authenticated POST from the
+Streamlit app. No live request or assessment of colour preservation was performed.
+
+The server reads each uploaded part into memory before checking its size and
+returns exception detail on inference failures. Before exposing a persistent
+service, bound request sizes upstream, validate decoded images on the server,
+limit concurrency and replace raw error text with safe diagnostics. The
+notebook launcher can print connection credentials. Rotate the runtime token,
+clear notebook outputs and keep the notebook out of version control.
 
 ## Live acceptance procedure
 

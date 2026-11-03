@@ -2,6 +2,8 @@ name: CPU inference smoke test
 
 on:
   workflow_dispatch:
+  push:
+    branches: [develop/automatic-hairstyle-workflow]
   pull_request:
     paths:
       - app.py

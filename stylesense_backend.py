@@ -13,6 +13,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 import requests
 
 
+MAX_UPLOAD_PART_BYTES = 10 * 1024 * 1024  # Enforced per file by the notebook server.
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_PIXELS = 25_000_000
 MAX_IMAGE_SIDE = 10_000
@@ -88,6 +89,8 @@ def generate_tryon(face_bytes: bytes, hairstyle_bytes: bytes, color_bytes: bytes
         "hairstyle": normalize_image(hairstyle_bytes),
         "color": normalize_image(color_bytes),
     }
+    if any(len(data) > MAX_UPLOAD_PART_BYTES for data in images.values()):
+        raise TryOnError("Each image must fit the hairstyle service’s 10 MiB upload limit after conversion.")
     files = {name: (f"{name}.png", data, "image/png") for name, data in images.items()}
     response = None
     try:
