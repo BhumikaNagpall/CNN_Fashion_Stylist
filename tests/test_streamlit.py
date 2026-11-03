@@ -16,6 +16,8 @@ from PIL import Image
 from streamlit.testing.v1 import AppTest
 
 import stylesense_backend
+import stylesense_catalogue
+from stylesense_backend import generate_three as real_generate_three
 import stylesense_state
 
 
@@ -23,7 +25,19 @@ class Upload(BytesIO):
     def __init__(self, data, name='photo.png'):
         super().__init__(data)
         self.name = name
+        self.size = len(data)
         self.type = 'image/png'
+
+
+class UnreadableUpload:
+    name = 'rejected.png'
+    type = 'image/png'
+
+    def __init__(self, size):
+        self.size = size
+
+    def getvalue(self):
+        raise AssertionError('Rejected upload contents should never be materialised')
 
 
 @pytest.fixture
@@ -82,7 +96,7 @@ def test_changed_upload_clears_old_results_until_reanalysed(app_environment, ima
 
 def test_over_limit_uploads_do_not_offer_analysis_or_generation(app_environment):
     uploads, analysis, generation = app_environment
-    uploads[:] = uploads * 4
+    uploads[:] = [UnreadableUpload(256)] * 4
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
     assert not app.exception
     assert any('Maximum 3' in error.value for error in app.error)
@@ -123,7 +137,8 @@ def test_no_valid_faces_never_sent_to_generation(app_environment):
     assert not app.get('download_button')
 
 
-def test_missing_catalogue_preserves_analysis_without_fake_generation(app_environment):
+def test_missing_catalogue_preserves_analysis_without_fake_generation(app_environment, monkeypatch, tmp_path):
+    monkeypatch.setattr(stylesense_catalogue, 'PROJECT_ROOT', tmp_path)
     uploads, analysis, generation = app_environment
     analysis.return_value['combined'] = np.array([1, 0, 0, 0, 0], dtype=np.float32)
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
@@ -155,3 +170,70 @@ def test_manual_flow_survives_reruns_and_reference_changes_clear_old_image(app_e
     assert not app.exception
     assert len(app.get('download_button')) == 3
     assert manual.call_count == 1
+
+
+@pytest.mark.parametrize('shape', ['Heart', 'Oblong', 'Oval', 'Round', 'Square'])
+def test_three_downloads_for_every_class_with_fixture_references(
+        app_environment, shape, tmp_path, monkeypatch, image_bytes):
+    """Exercise UI, orchestration and HTTP client with synthetic reference fixtures."""
+    _, analysis, _ = app_environment
+    scores = np.zeros(5, dtype=np.float32)
+    scores[stylesense_catalogue.CLASS_NAMES.index(shape)] = 1
+    analysis.return_value['combined'] = scores
+    analysis.return_value['valid'][0]['probabilities'] = scores
+    references = []
+    for index, name in enumerate(stylesense_catalogue.HAIRSTYLES[shape]):
+        path = tmp_path / f'reference{index}.png'
+        path.write_bytes(image_bytes(color=(50 * index, 100, 100)))
+        references.append((name, path))
+
+    def fixture_references(predicted_shape):
+        assert predicted_shape == shape
+        return references
+
+    calls = []
+    def mock_post(url, **kwargs):
+        files = kwargs['files']
+        assert files['face'][1] == files['color'][1]
+        calls.append(files['hairstyle'][1])
+        response = Mock(status_code=200, headers={'content-type': 'image/png'})
+        response.iter_content.return_value = [image_bytes()]
+        return response
+
+    monkeypatch.setattr(stylesense_catalogue, 'get_references', fixture_references)
+    monkeypatch.setattr(stylesense_backend, 'generate_three', real_generate_three)
+    monkeypatch.setattr(stylesense_backend.requests, 'post', mock_post)
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+    app.button[0].click().run()
+    assert not app.exception
+    assert app.metric[0].value == shape
+    assert len(calls) == len(set(calls)) == 3
+    assert len(app.get('download_button')) == 3
+    app.run()
+    assert not app.exception
+    assert len(calls) == 3
+    assert len(app.get('download_button')) == 3
+
+
+def test_oversized_portrait_safely_rejected_without_read(app_environment):
+    uploads, _, generation = app_environment
+    uploads[:] = [UnreadableUpload(stylesense_state.MAX_UPLOAD_BYTES + 1)]
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+    assert not app.exception
+    assert any('10 MB' in w.value for w in app.warning)
+    generation.assert_not_called()
+
+
+def test_oversized_manual_reference_rejected_without_read(app_environment, monkeypatch, image_bytes):
+    uploads, _, _ = app_environment
+    references = {'hairstyle_reference': UnreadableUpload(stylesense_state.MAX_UPLOAD_BYTES + 1),
+                  'color_reference': Upload(image_bytes())}
+    monkeypatch.setattr(st, 'file_uploader', lambda *args, **kwargs: uploads if kwargs.get('key') == 'multiple_photo_upload' else references.get(kwargs.get('key')))
+    manual = Mock()
+    monkeypatch.setattr(stylesense_backend, 'generate_tryon', manual)
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+    app.button[0].click().run()
+    next(button for button in app.button if button.label == 'Generate AI Try-On').click().run()
+    assert not app.exception
+    assert any('10 MB' in w.value for w in app.warning)
+    manual.assert_not_called()

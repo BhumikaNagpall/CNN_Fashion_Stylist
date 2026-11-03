@@ -9,7 +9,7 @@ from pathlib import Path
 from stylesense_catalogue import CLASS_NAMES, HAIRSTYLES, get_references
 from stylesense_backend import generate_three, generate_tryon, TryOnError
 from stylesense_state import (decode_upload, image_png, upload_fingerprint,
-                              sync_upload_state, analyze_records, ImageValidationError)
+                              sync_upload_state, analyze_records, ImageValidationError, MAX_UPLOAD_BYTES)
 from PIL import Image, ImageOps
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
@@ -209,16 +209,23 @@ def api_configuration():
             token or os.environ.get("HAIRFAST_API_TOKEN", ""))
 
 
+def bounded_upload_bytes(upload):
+    # Streamlit exposes the size before copying bytes out of its upload buffer.
+    # Oversized inputs use the same safe validation path as empty files.
+    return upload.getvalue() if 0 < upload.size <= MAX_UPLOAD_BYTES else b""
+
+
 st.header("📸 Upload Your Photos")
 st.write("Choose clear, front-facing photos of the same person, with one face per photo.")
 st.caption("When you analyse photos, the first successfully detected portrait and the selected hairstyle references are sent to the configured AI service to generate your looks. The portrait is also used as the colour reference. Generation requires an available AI service.")
 uploaded_files = st.file_uploader(
     "Select 1 to 3 photos of the same person", type=["jpg", "jpeg", "png"],
     accept_multiple_files=True, key="multiple_photo_upload")
-items = [(file.name, file.getvalue()) for file in (uploaded_files or [])]
-sync_upload_state(st.session_state, upload_fingerprint(items))
+too_many = len(uploaded_files or []) > 3
+items = [] if too_many else [(file.name, bounded_upload_bytes(file)) for file in (uploaded_files or [])]
+sync_upload_state(st.session_state, "too-many" if too_many else upload_fingerprint(items))
 
-if len(items) > 3:
+if too_many:
     st.error("Maximum 3 photos are allowed. Remove extra photos to continue.")
 elif items:
     if "input_records" not in st.session_state:
@@ -345,8 +352,9 @@ elif items:
             with st.expander("Advanced: try your own hairstyle and colour references"):
                 hairstyle_reference = st.file_uploader("Upload hairstyle reference", type=["jpg", "jpeg", "png"], key="hairstyle_reference")
                 color_reference = st.file_uploader("Upload hair colour reference", type=["jpg", "jpeg", "png"], key="color_reference")
-                manual_items = [(file.name, file.getvalue()) for file in (hairstyle_reference, color_reference) if file is not None]
-                manual_fingerprint = upload_fingerprint(manual_items)
+                hair_bytes = bounded_upload_bytes(hairstyle_reference) if hairstyle_reference is not None else b""
+                color_bytes = bounded_upload_bytes(color_reference) if color_reference is not None else b""
+                manual_fingerprint = upload_fingerprint([("hairstyle", hair_bytes), ("color", color_bytes)])
                 if st.session_state.get("manual_fingerprint") != manual_fingerprint:
                     st.session_state.pop("manual_result", None)
                     st.session_state.manual_fingerprint = manual_fingerprint
@@ -357,8 +365,8 @@ elif items:
                         st.info("Configure the AI service before generating a try-on.")
                     else:
                         try:
-                            hair = image_png(decode_upload(hairstyle_reference.getvalue()))
-                            colour = image_png(decode_upload(color_reference.getvalue()))
+                            hair = image_png(decode_upload(hair_bytes))
+                            colour = image_png(decode_upload(color_bytes))
                             with st.spinner("Generating your custom hairstyle..."):
                                 st.session_state.manual_result = generate_tryon(portrait, hair, colour, api_url, api_token)
                         except (ImageValidationError, TryOnError) as error:

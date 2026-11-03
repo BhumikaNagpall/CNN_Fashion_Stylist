@@ -38,7 +38,8 @@ def test_round_references_exist_decode_and_are_location_independent(monkeypatch,
 
 
 @pytest.mark.parametrize('shape', ['Heart', 'Oblong', 'Oval', 'Square'])
-def test_missing_assets_remain_explicit_not_mislabeled_round_images(shape):
+def test_missing_assets_remain_explicit_not_mislabeled_round_images(shape, monkeypatch, tmp_path):
+    monkeypatch.setattr(catalogue, 'PROJECT_ROOT', tmp_path)
     assert all(path is None for _, path in catalogue.get_references(shape))
 
 

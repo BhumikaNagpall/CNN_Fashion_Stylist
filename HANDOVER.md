@@ -34,3 +34,11 @@ The active model archive has embedded preprocessing from 0–255 to -1–1, a 22
 5. Use a permitted test portrait, verify a real Round generation, then three results per face shape, correct style/colour, downloads and retry after a partial failure.
 6. Update issues and this file with actual tests and commit/PR status; review before merging.
 
+
+## Latest checkpoint
+
+- Open draft [PR #9](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/pull/9) contains the implementation. The development branch is the durable source of truth; main has not been merged.
+- QA reported 71 passing regression tests after upload count/size preflight was added. Five-category UI tests use fixture references and mocked HTTP. They verify the flow, not GPU-generated images.
+- Deployment files completed: README.md, requirements.txt, requirements-dev.txt, .github/workflows/tests.yml, .streamlit/secrets.toml.example and docs/deployment.md. Review deployment-host compatibility and CI results.
+- The Colab page returned HTML, its Drive export redirected to sign-in, and a direct download timed out. Request the notebook as a redacted .ipynb with outputs cleared, then test against a running GPU endpoint using secure configuration.
+- Generated reference assets are a separate deliverable. Inspect the catalogue and future issue #4 updates before claiming all 15 slots are covered.

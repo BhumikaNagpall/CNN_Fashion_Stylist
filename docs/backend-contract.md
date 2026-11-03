@@ -36,8 +36,14 @@ model weights, public service URL, or credentials. The client contract above doe
 not prove that a deployed server implements these fields or produces images.
 No live generation has been verified as part of implementing this client.
 
-To complete issue #1, supply the existing backend repository/notebook or server
-source and the HTTPS service base URL. Configure its token privately in deployment
+The project owner supplied a Colab notebook link. The development environment
+received Colab HTML and a Google sign-in page from the Drive export route.
+The direct content download timed out. These responses did not provide the
+notebook source for inspection.
+
+To complete source review for issue #1, provide a redacted `.ipynb` export with
+outputs cleared, or the equivalent backend source. Live verification separately
+requires the running server's HTTPS base URL. Configure its token privately in deployment
 secrets or environment variables; do not put it in an issue, commit, or report.
 The service must be running with its required GPU/checkpoints. Backend versions,
 VRAM requirements, upstream licensing and startup command must be established
