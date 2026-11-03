@@ -46,3 +46,15 @@ def test_missing_assets_remain_explicit_not_mislabeled_round_images(shape, monke
 def test_unknown_shape_rejected():
     with pytest.raises(ValueError):
         catalogue.get_references('Triangle')
+
+
+@pytest.mark.parametrize('shape', list(EXPECTED))
+def test_three_shipped_references_are_distinct_and_ready_for_transfer(shape):
+    from stylesense_backend import normalize_image
+
+    paths = [path for _, path in catalogue.get_references(shape)]
+    assert all(path is not None for path in paths), shape
+    assert len(set(paths)) == 3, shape
+    for path in paths:
+        # Exercise the same decode, dimension and size checks as the HTTP client.
+        assert normalize_image(path.read_bytes()).startswith(b'\x89PNG\r\n\x1a\n')

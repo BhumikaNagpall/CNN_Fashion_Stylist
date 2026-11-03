@@ -15,19 +15,33 @@ HAIRSTYLES = {'Heart': ['Side-swept bangs', 'Shoulder-length layers', 'Chin-leng
  'Round': ['Long layers', 'Side-parted hairstyle', 'Long curtain bangs'],
  'Square': ['Soft layered waves', 'Side-swept bangs', 'Textured long bob']}
 
-HAIRSTYLE_REFERENCES = {'Heart': {'Side-swept bangs': None,
-           'Shoulder-length layers': None,
-           'Chin-length bob': None},
- 'Oblong': {'Curtain bangs': None,
-            'Layered shoulder-length hair': None,
-            'Wavy bob': None},
- 'Oval': {'Long layered hair': None, 'Soft waves': None, 'Curtain bangs': None},
- 'Round': {'Long layers': 'hairstyle_references/round_long_layers.jpg',
-           'Side-parted hairstyle': 'hairstyle_references/round_side_parted.jpg',
-           'Long curtain bangs': 'hairstyle_references/round_curtain_bangs.jpg'},
- 'Square': {'Soft layered waves': None,
-            'Side-swept bangs': None,
-            'Textured long bob': None}}
+HAIRSTYLE_REFERENCES = {
+    "Heart": {
+        "Side-swept bangs": "hairstyle_references/side_swept_bangs.jpg",
+        "Shoulder-length layers": "hairstyle_references/shoulder_length_layers.jpg",
+        "Chin-length bob": "hairstyle_references/chin_length_bob.jpg"
+    },
+    "Oblong": {
+        "Curtain bangs": "hairstyle_references/curtain_bangs.jpg",
+        "Layered shoulder-length hair": "hairstyle_references/shoulder_length_layers.jpg",
+        "Wavy bob": "hairstyle_references/wavy_bob.jpg"
+    },
+    "Oval": {
+        "Long layered hair": "hairstyle_references/long_layered_hair.jpg",
+        "Soft waves": "hairstyle_references/soft_waves.jpg",
+        "Curtain bangs": "hairstyle_references/curtain_bangs.jpg"
+    },
+    "Round": {
+        "Long layers": "hairstyle_references/round_long_layers.jpg",
+        "Side-parted hairstyle": "hairstyle_references/round_side_parted.jpg",
+        "Long curtain bangs": "hairstyle_references/round_curtain_bangs.jpg"
+    },
+    "Square": {
+        "Soft layered waves": "hairstyle_references/soft_layered_waves.jpg",
+        "Side-swept bangs": "hairstyle_references/side_swept_bangs.jpg",
+        "Textured long bob": "hairstyle_references/textured_long_bob.jpg"
+    }
+}
 
 def get_references(shape: str) -> list[tuple[str, Path | None]]:
     """Return the three ordered recommendations and available reference paths.

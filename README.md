@@ -9,7 +9,7 @@ The classifier, class order, averaging rule and recommendation names are preserv
 - Face categories: Heart, Oblong, Oval, Round and Square.
 - Analysis and generated images are retained across Streamlit reruns; changing uploads invalidates stale results.
 - Automatic generation uses built-in references and the validated original portrait as the colour reference. Three results are handled independently, including partial failures and individual downloads.
-- The three existing **Round** reference images are included. The other twelve catalogue entries explicitly have missing assets; they must be supplied and visually validated before all-five-class generation is complete.
+- All five face shapes have three bundled reference assignments. Round uses the original three photographs. The other classes use nine generated hairstyle portraits, with three styles shared across classes. See [the catalogue](docs/model-and-catalogue.md) for coverage and visual checks.
 - Manual hairstyle/colour reference uploads remain available as an advanced option.
 - HairFastGAN server source, GPU hosting, URL and credentials are **not included**. Automated contract tests use simulated responses and do not prove live generation quality or availability.
 
@@ -74,6 +74,6 @@ Run full model-loading and real portrait checks separately using `requirements.t
 | `stylesense_catalogue.py` | Existing recommendations and reference coverage |
 | `stylesense_backend.py` | Bounded, authenticated HairFastGAN requests and partial-failure handling |
 | `tests/` | Unit and regression tests |
-| `hairstyle_references/` | Existing Round reference images |
+| `hairstyle_references/` | Original Round images and generated non-Round references |
 
 See [deployment instructions](docs/deployment.md) and [model/catalogue notes](docs/model-and-catalogue.md). Development is tracked in [GitHub Issues](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues).

@@ -13,32 +13,29 @@ Preserve the current MediaPipe face detector, fine-tuned MobileNetV2, five label
 | [1](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/1) | Backend | Client contract documented in docs/backend-contract.md. Live authentication, GPU transfer quality and natural colour preservation still need verification. |
 | [2](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/2) | Frontend | Session state retains analysis, uploads and generated results; new uploads invalidate derived results. AppTest covers reruns. |
 | [3](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/3) | Frontend, QA | JPEG/PNG decoding, bounds, EXIF correction, original indices and first validated portrait implemented. |
-| [4](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/4) | ML, assets | All 15 recommendations preserved; three original Round assets decoded/inspected. User selected generated portraits for remaining entries. Verify asset files and mapping before marking complete. |
+| [4](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/4) | ML, assets | All 15 recommendations preserved; three original Round assets decoded/inspected. Nine generated reference portraits cover the remaining twelve entries. All 15 were resolved and decoded, and the nine portraits were visually reviewed. Verify transfer quality on the live GPU. |
 | [5](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/5) | Backend, Frontend | Analysis triggers three independent transfers when references and service config exist. Per-style downloads and partial retry implemented. Live acceptance outstanding. |
 | [6](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/6) | Backend, QA | HTTPS, no redirects, bounded responses, decoded PNG output and sanitized errors implemented. |
-| [7](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/7) | QA | Previous environment reported 64 passing tests. Model and HTTP doubles in UI tests cannot validate actual GPU output. Re-run after latest changes. |
-| [8](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/8) | DevOps | Deployment docs, requirements, secret placeholders and CI in progress. Check clean install before closing. |
+| [7](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/7) | QA | Latest isolated local run: 79 passed in 5.97s, including the 10 MiB multipart guard and all 15 real catalogue assignments. Model and HTTP doubles in UI tests cannot validate actual GPU output. Re-run after latest changes. |
+| [8](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/issues/8) | DevOps | README, deployment guide, requirements, secret placeholders, regression workflow and CPU inference smoke workflow implemented. Check clean install before closing. |
 
 The lead coordinates independent session agents, not GitHub bot accounts. P0: issues 1 and 5. Issue 5 depends on issues 1–4 and 6. Tests and deployment track the integrated flow.
 
-## Runtime evidence
+## Current checkpoint
 
-The active model archive has embedded preprocessing from 0–255 to -1–1, a 224×224 input and five-class softmax. The previous environment loaded the classifier and ran a finite five-score CPU prediction on dummy input. MediaPipe startup then reported missing system library libGLESv2.so.2. No successful real HairFastGAN call recorded. Do not infer accuracy or try-on quality from unit tests.
+[Draft PR #9](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/pull/9) holds the development work. Main remains at the baseline. Use the PR branch as the source of truth across sessions. GitHub issue owners refer to session roles. No bot accounts were assigned.
 
-## Resume steps
+- Model and landmark assets are present. A previous CPU run loaded the existing classifier and returned five finite probabilities summing to one. The slim local host lacked libGLESv2.so.2 for MediaPipe. The new CPU smoke workflow installs the native dependencies and exercises the production crop and classifier functions on a Round reference.
+- The owner provided the exported Colab notebook. Source inspection confirmed FastAPI GET /health, authenticated POST /tryon, three multipart fields (face, hairstyle, color), and a PNG result from HairFast.swap with alignment. Each uploaded part has a 10 MiB limit. Source portrait reuse for colour matches the interface. Natural-colour preservation and visual identity still require a real transfer.
+- The notebook contains historical model image output and a successful health check. No live authenticated POST was observed in this development session. A generated token appeared in saved notebook output. Rotate it and clear outputs before reuse. No notebook, credentials or tunnel URLs are committed.
+- The original three Round references plus nine generated portraits cover all five categories. Some cuts are shared across categories. The catalogue documentation records which assets correspond to each recommendation.
+- Latest local tests: 79 passed in 5.97 seconds. Simulated HTTP covers three results, partial failures, retries and downloads. Streamlit rerun tests cover retention and invalidation. Real file checks cover all 15 catalogue assignments.
+- The 71-test predecessor passed [GitHub Actions](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/actions/runs/41619060581). Inspect the PR checks for the current revision.
 
-1. Fetch the development branch, check open pull requests, latest commits, issue updates and working tree. Do not repeat the original audit or overwrite newer work.
-2. Install development dependencies, run `python -m pytest -q` and inspect results. For runtime validation install the full requirements and required system libraries.
-3. Complete/verify the generated reference catalogue and check all 15 entries resolve, decode and match the intended style. Preserve Round files (PNG bytes with .jpg filenames).
-4. Obtain accessible backend notebook or source, running HTTPS base URL, secure token and GPU runtime. The user supplied a Colab notebook link in the chat. Do not commit credentials or unredacted notebook output.
-5. Use a permitted test portrait, verify a real Round generation, then three results per face shape, correct style/colour, downloads and retry after a partial failure.
-6. Update issues and this file with actual tests and commit/PR status; review before merging.
+## Resume from here
 
-
-## Latest checkpoint
-
-- Open draft [PR #9](https://github.com/BhumikaNagpall/CNN_Fashion_Stylist/pull/9) contains the implementation. The development branch is the durable source of truth; main has not been merged.
-- QA reported 71 passing regression tests after upload count/size preflight was added. Five-category UI tests use fixture references and mocked HTTP. They verify the flow, not GPU-generated images.
-- Deployment files completed: README.md, requirements.txt, requirements-dev.txt, .github/workflows/tests.yml, .streamlit/secrets.toml.example and docs/deployment.md. Review deployment-host compatibility and CI results.
-- The Colab page returned HTML, its Drive export redirected to sign-in, and a direct download timed out. Request the notebook as a redacted .ipynb with outputs cleared, then test against a running GPU endpoint using secure configuration.
-- Generated reference assets are a separate deliverable. Inspect the catalogue and future issue #4 updates before claiming all 15 slots are covered.
+1. Open PR #9 and fetch its latest head. Inspect updated issues, CI and any new commits before editing. The audited model and completed features do not require another audit.
+2. For local regression testing, use Python 3.12, install requirements-dev.txt and run python -m pytest -q. For CPU inference, use requirements.txt and the native packages in docs/deployment.md, then run python -m scripts.runtime_smoke.
+3. The remaining external requirement is a running GPU service. Start the verified Colab backend, rotate the printed token and configure HAIRFAST_API_URL and HAIRFAST_API_TOKEN through private environment or Streamlit secrets. Never share tokens in chat, issues or commits.
+4. Check GET /health. Run the application on an authorized test portrait and verify a real authenticated three-style Round transfer first. Check three distinct decoded images, visual style, face identity, natural hair colour, three downloads and isolated retry after one failure. Repeat for the other four categories. Validate backend-side resource limits and safe error reporting before public deployment.
+5. Record sanitized results on #1 and #5, review the current PR checks and diff, and merge only when acceptance criteria pass. Update this handover before any further session break.

@@ -27,15 +27,17 @@ The excluded `face_shape_model.keras` and `best_face_shape_model.keras` are hist
 
 `stylesense_catalogue.py` preserves all recommendation strings and their ordering. `get_references(shape)` returns three `(name, absolute_path_or_None)` pairs. Unknown categories raise `ValueError`; missing mappings/files return `None`. This is deliberate: incomplete coverage must not silently substitute an unrelated hairstyle.
 
-| Shape | First recommendation | Second recommendation | Third recommendation | Assets |
-|---|---|---|---|---|
-| Heart | Side-swept bangs | Shoulder-length layers | Chin-length bob | All three missing |
-| Oblong | Curtain bangs | Layered shoulder-length hair | Wavy bob | All three missing |
-| Oval | Long layered hair | Soft waves | Curtain bangs | All three missing |
-| Round | Long layers | Side-parted hairstyle | Long curtain bangs | All three present |
-| Square | Soft layered waves | Side-swept bangs | Textured long bob | All three missing |
+All 15 assignments resolve to files. Nine synthetic studio portraits were created for this project using image generation. They show one adult, front-facing subject on a neutral background. Each generated image was inspected for the requested cut and decoded as JPEG. The existing Round references remain separate. Actual hairstyle transfer fidelity still requires evaluation on the running backend.
 
-To complete Issue #4, supply suitable, approved hairstyle-reference photographs for the 12 missing entries, with permission/provenance recorded. A shared image can cover equivalent styles after explicit review, but no cross-class reuse has been assumed. This implementation provides the complete mapping schema, not complete reference-image coverage.
+| Shape | First recommendation | Second recommendation | Third recommendation |
+|---|---|---|---|
+| Heart | Side-swept bangs | Shoulder-length layers | Chin-length bob |
+| Oblong | Curtain bangs | Layered shoulder-length hair | Wavy bob |
+| Oval | Long layered hair | Soft waves | Curtain bangs |
+| Round | Long layers | Side-parted hairstyle | Long curtain bangs |
+| Square | Soft layered waves | Side-swept bangs | Textured long bob |
+
+The shoulder-length layered portrait serves Heart and Oblong. The curtain bangs portrait serves Oblong and Oval. The side-swept bangs portrait serves Heart and Square. The two wave references are visually distinct: Oval uses long flowing waves, while Square uses shoulder-length layered waves. The bob portraits distinguish chin-length blunt hair, short waves and a longer textured cut. The exact style-to-filename mapping lives in `stylesense_catalogue.py`.
 
 ## Round reference validation
 
