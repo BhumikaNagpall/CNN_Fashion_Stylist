@@ -1,0 +1,6 @@
+# Lightweight CI test environment: model calls and the remote GPU service are isolated.
+numpy==2.5.4
+Pillow==13.0.0
+requests==2.34.2
+streamlit==1.66.1
+pytest==9.2.0
