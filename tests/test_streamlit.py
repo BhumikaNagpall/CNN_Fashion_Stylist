@@ -237,3 +237,63 @@ def test_oversized_manual_reference_rejected_without_read(app_environment, monke
     assert not app.exception
     assert any('10 MB' in w.value for w in app.warning)
     manual.assert_not_called()
+
+
+def test_changed_api_url_regenerates_looks_without_reanalysing(app_environment, monkeypatch, image_bytes):
+    _, analysis, generation = app_environment
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+    app.button[0].click().run()
+    assert not app.exception
+    assert generation.call_count == 1
+    replacement = {name: {'image': image_bytes(color=(50, 80, 100)), 'error': None}
+                   for name in generation.return_value}
+    generation.return_value = replacement
+    monkeypatch.setenv('HAIRFAST_API_URL', 'https://replacement.example.test')
+    app.run()
+    assert not app.exception
+    assert analysis.call_count == 1
+    assert generation.call_count == 2
+    assert generation.call_args.args[2] == 'https://replacement.example.test'
+    assert generation.call_args.kwargs['previous_results'] == {}
+    assert app.session_state['generated'] == replacement
+    assert len(app.get('download_button')) == 3
+    app.run()
+    assert generation.call_count == 2
+
+
+def test_changed_api_url_clears_manual_image_until_explicit_generation(app_environment, monkeypatch, image_bytes):
+    uploads, analysis, generation = app_environment
+    references = {'hairstyle_reference': Upload(image_bytes(), 'hair.png'),
+                  'color_reference': Upload(image_bytes(color=(30, 30, 30)), 'colour.png')}
+    monkeypatch.setattr(st, 'file_uploader', lambda *args, **kwargs: uploads if kwargs.get('key') == 'multiple_photo_upload' else references.get(kwargs.get('key')))
+    manual = Mock(return_value=image_bytes())
+    monkeypatch.setattr(stylesense_backend, 'generate_tryon', manual)
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+    app.button[0].click().run()
+    next(button for button in app.button if button.label == 'Generate AI Try-On').click().run()
+    assert len(app.get('download_button')) == 4
+    monkeypatch.setenv('HAIRFAST_API_URL', 'https://replacement.example.test')
+    app.run()
+    assert not app.exception
+    assert analysis.call_count == 1 and manual.call_count == 1
+    assert len(app.get('download_button')) == 3
+    assert 'manual_result' not in app.session_state
+    next(button for button in app.button if button.label == 'Generate AI Try-On').click().run()
+    assert not app.exception
+    assert manual.call_count == 2
+    assert manual.call_args.args[3] == 'https://replacement.example.test'
+    assert len(app.get('download_button')) == 4
+
+
+def test_equivalent_api_url_and_token_rotation_keep_generated_results(app_environment, monkeypatch):
+    _, analysis, generation = app_environment
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / 'app.py')).run()
+    app.button[0].click().run()
+    fingerprint = app.session_state['generation_fingerprint']
+    monkeypatch.setenv('HAIRFAST_API_URL', 'https://example.test/')
+    monkeypatch.setenv('HAIRFAST_API_TOKEN', 'rotated-test-token')
+    app.run()
+    assert not app.exception
+    assert analysis.call_count == 1 and generation.call_count == 1
+    assert app.session_state['generation_fingerprint'] == fingerprint
+    assert len(app.get('download_button')) == 3

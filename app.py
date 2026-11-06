@@ -311,7 +311,10 @@ elif items:
                     reference_identity.append((name, path.read_bytes() if path else b"missing"))
                 except OSError:
                     reference_identity.append((name, b"unreadable"))
-            generation_fingerprint = upload_fingerprint([("portrait", portrait)] + reference_identity)
+            # A new service may use a different model; do not show its predecessor's results.
+            service_identity = ("service", api_url.strip().rstrip("/").encode("utf-8"))
+            generation_fingerprint = upload_fingerprint(
+                [("portrait", portrait), service_identity] + reference_identity)
             if st.session_state.get("generation_fingerprint") != generation_fingerprint:
                 st.session_state.pop("generated", None)
                 st.session_state.pop("generation_attempted", None)
@@ -354,7 +357,9 @@ elif items:
                 color_reference = st.file_uploader("Upload hair colour reference", type=["jpg", "jpeg", "png"], key="color_reference")
                 hair_bytes = bounded_upload_bytes(hairstyle_reference) if hairstyle_reference is not None else b""
                 color_bytes = bounded_upload_bytes(color_reference) if color_reference is not None else b""
-                manual_fingerprint = upload_fingerprint([("hairstyle", hair_bytes), ("color", color_bytes)])
+                manual_fingerprint = upload_fingerprint([
+                    ("portrait", portrait), service_identity,
+                    ("hairstyle", hair_bytes), ("color", color_bytes)])
                 if st.session_state.get("manual_fingerprint") != manual_fingerprint:
                     st.session_state.pop("manual_result", None)
                     st.session_state.manual_fingerprint = manual_fingerprint
